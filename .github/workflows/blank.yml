@@ -1,0 +1,43 @@
+name: Spotify to Slack Status
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # A cada 5 minutos
+
+jobs:
+  update-slack-status:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: "Checkout repository"
+      uses: actions/checkout@v2
+
+    - name: "Get the currently playing track from Spotify"
+      id: spotify
+      run: |
+        curl -X "GET" "https://api.spotify.com/v1/me/player/currently-playing" \
+        -H "Authorization: Bearer ${{ secrets.SPOTIFY_ACCESS_TOKEN }}" \
+        -H "Accept: application/json" \
+        -o current_track.json
+
+    - name: "Extract track info"
+      id: extract_info
+      run: |
+        track_name=$(jq -r '.item.name' current_track.json)
+        artist_name=$(jq -r '.item.artists[0].name' current_track.json)
+        echo "Track Name: $track_name"
+        echo "Artist Name: $artist_name"
+        echo "::set-output name=track_name::$track_name"
+        echo "::set-output name=artist_name::$artist_name"
+
+    - name: "Update Slack status"
+      run: |
+        curl -X "POST" "https://slack.com/api/users.profile.set" \
+        -H "Authorization: Bearer ${{ secrets.SLACK_ACCESS_TOKEN }}" \
+        -H "Content-Type: application/json" \
+        --data "{
+          \"profile\": {
+            \"status_text\": \"🎶 ${{ steps.extract_info.outputs.track_name }} by ${{ steps.extract_info.outputs.artist_name }}\",
+            \"status_emoji\": \":musical_note:\"
+          }
+        }"
